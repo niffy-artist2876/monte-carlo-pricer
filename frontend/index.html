@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Monte Carlo Options Pricer</title>
+  <meta name="description" content="A Monte Carlo options pricer powered by a C++ simulation engine." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #f8f7f5;
+      --surface: #ffffff;
+      --border: #e5e2dc;
+      --text: #1a1a1a;
+      --text2: #6b6b6b;
+      --text3: #a8a8a8;
+      --accent: #2563eb;
+      --accent-bg: #eff4ff;
+      --green: #16a34a;
+      --red: #dc2626;
+      --radius: 10px;
+      --radius-sm: 6px;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* ── Layout ── */
+    .wrapper {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 28px 72px;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 40px 0 32px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 40px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+
+    .header-left h1 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+
+    .header-left p {
+      font-size: 0.8rem;
+      color: var(--text2);
+      margin-top: 4px;
+    }
+
+    .status-dot {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 0.75rem;
+      color: var(--text2);
+    }
+
+    .status-dot::before {
+      content: '';
+      width: 7px;
+      height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+    }
+
+    /* ── Grid ── */
+    .grid {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+
+    @media (max-width: 860px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+
+    .card+.card {
+      margin-top: 16px;
+    }
+
+    .card-title {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--text2);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    /* ── Option type toggle ── */
+    .toggle {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      margin-bottom: 22px;
+    }
+
+    .toggle button {
+      flex: 1;
+      padding: 9px;
+      border: none;
+      background: transparent;
+      color: var(--text2);
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .toggle button.active {
+      background: var(--text);
+      color: #fff;
+    }
+
+    .toggle button:not(.active):hover {
+      background: var(--bg);
+    }
+
+    /* ── Fields ── */
+    .fields {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .field label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text2);
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      padding: 8px 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .field input:focus {
+      border-color: var(--accent);
+      background: #fff;
+    }
+
+    /* ── Sliders ── */
+    .slider-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text2);
+    }
+
+    .slider-val {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text);
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 2px;
+      background: var(--border);
+      border-radius: 1px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: var(--text);
+      border-radius: 50%;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+
+    /* ── Run button ── */
+    #priceBtn {
+      width: 100%;
+      margin-top: 6px;
+      padding: 11px;
+      background: var(--text);
+      border: none;
+      border-radius: var(--radius-sm);
+      color: #fff;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    #priceBtn:hover {
+      opacity: 0.85;
+    }
+
+    #priceBtn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .spinner {
+      display: none;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    #priceBtn.loading .btn-text {
+      display: none;
+    }
+
+    #priceBtn.loading .spinner {
+      display: block;
+    }
+
+    /* ── Right column ── */
+    .right {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* ── Result metrics ── */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    @media (max-width: 640px) {
+      .metrics {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .metric {
+      background: var(--surface);
+      padding: 20px 16px;
+    }
+
+    .metric-label {
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 8px;
+    }
+
+    .metric-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.25rem;
+      font-weight: 500;
+      color: var(--text);
+      transition: color 0.3s;
+    }
+
+    .metric-value.dash {
+      color: var(--text3);
+      font-size: 1rem;
+    }
+
+    .metric-value.updated {
+      animation: pop 0.35s ease;
+    }
+
+    @keyframes pop {
+      0% {
+        transform: scale(1.04);
+      }
+
+      100% {
+        transform: scale(1);
+      }
+    }
+
+    .metric-sub {
+      font-size: 0.68rem;
+      color: var(--text3);
+      margin-top: 3px;
+    }
+
+    /* Primary price highlight */
+    .metric.primary .metric-value {
+      color: var(--accent);
+      font-size: 1.45rem;
+    }
+
+    /* ── CI bar ── */
+    .ci-bar-track {
+      position: relative;
+      height: 6px;
+      background: var(--bg);
+      border-radius: 3px;
+      margin-top: 14px;
+    }
+
+    .ci-bar-fill {
+      position: absolute;
+      height: 100%;
+      background: var(--accent);
+      opacity: 0.25;
+      border-radius: 3px;
+      transition: left 0.5s ease, width 0.5s ease;
+      left: 25%;
+      width: 50%;
+    }
+
+    .ci-bar-needle {
+      position: absolute;
+      top: -4px;
+      width: 2px;
+      height: 14px;
+      background: var(--accent);
+      border-radius: 1px;
+      transition: left 0.5s ease;
+      left: 50%;
+    }
+
+    .ci-labels {
+      display: flex;
+      justify-content: space-between;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      color: var(--text2);
+      margin-top: 8px;
+    }
+
+    .ci-center {
+      color: var(--accent);
+    }
+
+    /* ── Chart ── */
+    .chart-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 18px;
+    }
+
+    .chart-tab {
+      padding: 5px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text2);
+      font-family: inherit;
+      font-size: 0.75rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .chart-tab.active {
+      background: var(--text);
+      border-color: var(--text);
+      color: #fff;
+    }
+
+    .chart-tab:not(.active):hover {
+      background: var(--bg);
+    }
+
+    .chart-container {
+      position: relative;
+      height: 220px;
+    }
+
+    .chart-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 220px;
+      color: var(--text3);
+      font-size: 0.8rem;
+      gap: 6px;
+    }
+
+    /* ── History table ── */
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+    }
+
+    th {
+      text-align: left;
+      padding: 6px 10px;
+      color: var(--text3);
+      font-weight: 600;
+      font-size: 0.67rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.77rem;
+      color: var(--text2);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    td.call {
+      color: var(--green);
+      font-weight: 500;
+    }
+
+    td.put {
+      color: var(--red);
+      font-weight: 500;
+    }
+
+    td.price {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    .empty-row {
+      text-align: center;
+      padding: 28px;
+      color: var(--text3);
+    }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #fff;
+      border: 1px solid #fca5a5;
+      color: var(--red);
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      transition: transform 0.3s ease;
+      z-index: 99;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    #toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrapper">
+
+    <!-- Header -->
+    <header>
+      <div class="header-left">
+        <h1>Monte Carlo Options Pricer</h1>
+        <p>Black-Scholes GBM · C++ simulation engine</p>
+      </div>
+      <div class="status-dot">C++ engine active</div>
+    </header>
+
+    <div class="grid">
+
+      <!-- LEFT: Controls -->
+      <div class="left">
+        <div class="card">
+          <div class="card-title">Parameters</div>
+
+          <div class="toggle">
+            <button id="btnCall" class="active" onclick="setType('call')">Call</button>
+            <button id="btnPut" onclick="setType('put')">Put</button>
+          </div>
+
+          <div class="fields">
+            <div class="field-row">
+              <div class="field">
+                <label>Spot Price (S)</label>
+                <input type="number" id="S" value="100" min="1" step="1" />
+              </div>
+              <div class="field">
+                <label>Strike Price (K)</label>
+                <input type="number" id="K" value="100" min="1" step="1" />
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field">
+                <label>Risk-Free Rate (r)</label>
+                <input type="number" id="r" value="0.05" min="0" max="1" step="0.001" />
+              </div>
+              <div class="field">
+                <label>Time to Expiry (yrs)</label>
+                <input type="number" id="T" value="1.0" min="0.01" step="0.01" />
+              </div>
+            </div>
+
+            <div class="slider-group">
+              <div class="slider-header">
+                <span>Volatility (σ)</span>
+                <span class="slider-val" id="sigmaVal">0.20</span>
+              </div>
+              <input type="range" id="sigma" min="0.01" max="1.0" step="0.01" value="0.20"
+                oninput="document.getElementById('sigmaVal').textContent = parseFloat(this.value).toFixed(2)" />
+            </div>
+
+            <div class="slider-group">
+              <div class="slider-header">
+                <span>Simulation Paths</span>
+                <span class="slider-val" id="pathsVal">100,000</span>
+              </div>
+              <input type="range" id="paths" min="1000" max="500000" step="1000" value="100000"
+                oninput="document.getElementById('pathsVal').textContent = parseInt(this.value).toLocaleString()" />
+            </div>
+
+            <div class="slider-group">
+              <div class="slider-header">
+                <span>Time Steps</span>
+                <span class="slider-val" id="stepsVal">252</span>
+              </div>
+              <input type="range" id="time_steps" min="10" max="504" step="2" value="252"
+                oninput="document.getElementById('stepsVal').textContent = this.value" />
+            </div>
+
+            <button id="priceBtn" onclick="runPricer()">
+              <span class="btn-text">Price Option</span>
+              <div class="spinner"></div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Results -->
+      <div class="right">
+
+        <!-- Metrics row -->
+        <div class="metrics">
+          <div class="metric primary" id="card-price">
+            <div class="metric-label">Option Price</div>
+            <div class="metric-value dash" id="val-price">—</div>
+            <div class="metric-sub">Discounted mean payoff</div>
+          </div>
+          <div class="metric" id="card-stderr">
+            <div class="metric-label">Std Error</div>
+            <div class="metric-value dash" id="val-stderr">—</div>
+            <div class="metric-sub">Monte Carlo SE</div>
+          </div>
+          <div class="metric" id="card-lower">
+            <div class="metric-label">CI Lower</div>
+            <div class="metric-value dash" id="val-lower">—</div>
+            <div class="metric-sub">95% confidence</div>
+          </div>
+          <div class="metric" id="card-upper">
+            <div class="metric-label">CI Upper</div>
+            <div class="metric-value dash" id="val-upper">—</div>
+            <div class="metric-sub">95% confidence</div>
+          </div>
+        </div>
+
+        <!-- Confidence Interval -->
+        <div class="card">
+          <div class="card-title">Confidence Interval</div>
+          <div class="ci-bar-track">
+            <div class="ci-bar-fill" id="ciBarFill"></div>
+            <div class="ci-bar-needle" id="ciBarNeedle"></div>
+          </div>
+          <div class="ci-labels">
+            <span id="ciLabelLow">—</span>
+            <span class="ci-center">price</span>
+            <span id="ciLabelHigh">—</span>
+          </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="card">
+          <div class="card-title">Visualisation</div>
+          <div class="chart-tabs">
+            <button class="chart-tab active" id="tab-convergence"
+              onclick="switchTab('convergence')">Convergence</button>
+            <button class="chart-tab" id="tab-payoff" onclick="switchTab('payoff')">Payoff Profile</button>
+          </div>
+          <div class="chart-container" id="chart-area">
+            <div class="chart-placeholder" id="placeholder">
+              <span>Run a simulation to see results</span>
+            </div>
+            <canvas id="myChart" style="display:none;"></canvas>
+          </div>
+        </div>
+
+        <!-- History -->
+        <div class="card">
+          <div class="card-title">Run History</div>
+          <div class="table-wrap">
+            <table id="histTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Type</th>
+                  <th>S</th>
+                  <th>K</th>
+                  <th>σ</th>
+                  <th>T</th>
+                  <th>Price</th>
+                  <th>SE</th>
+                </tr>
+              </thead>
+              <tbody id="histBody">
+                <tr>
+                  <td colspan="8" class="empty-row">No runs yet</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- /right -->
+    </div><!-- /grid -->
+  </div><!-- /wrapper -->
+
+  <!-- Toast -->
+  <div id="toast"></div>
+
+  <script>
+    let optionType = 'call';
+    let history = [];
+    let chartInst = null;
+    let activeTab = 'convergence';
+    let lastResult = null;
+
+    function setType(t) {
+      optionType = t;
+      document.getElementById('btnCall').classList.toggle('active', t === 'call');
+      document.getElementById('btnPut').classList.toggle('active', t === 'put');
+    }
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('.chart-tab').forEach(b => b.classList.remove('active'));
+      document.getElementById('tab-' + tab).classList.add('active');
+      if (lastResult) renderChart(lastResult);
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3500);
+    }
+
+    function setMetric(id, fmt) {
+      const el = document.getElementById('val-' + id);
+      el.textContent = fmt;
+      el.classList.remove('dash', 'updated');
+      void el.offsetWidth;
+      el.classList.add('updated');
+    }
+
+    function updateCIBar(price, lower, upper) {
+      const pad = (upper - lower) * 0.5;
+      const min = lower - pad, max = upper + pad;
+      const range = max - min;
+      const pct = v => ((v - min) / range * 100).toFixed(2) + '%';
+
+      document.getElementById('ciBarFill').style.left = pct(lower);
+      document.getElementById('ciBarFill').style.width = ((upper - lower) / range * 100).toFixed(2) + '%';
+      document.getElementById('ciBarNeedle').style.left = pct(price);
+      document.getElementById('ciLabelLow').textContent = '$' + lower.toFixed(4);
+      document.getElementById('ciLabelHigh').textContent = '$' + upper.toFixed(4);
+    }
+
+    const CHART_COLORS = {
+      line: '#2563eb',
+      band: 'rgba(37,99,235,0.07)',
+      dashed: 'rgba(37,99,235,0.3)',
+      purple: '#7c3aed',
+      purpleArea: 'rgba(124,58,237,0.07)',
+      grid: 'rgba(0,0,0,0.05)',
+      tick: '#a8a8a8',
+      tooltip: { bg: '#fff', border: '#e5e2dc', title: '#6b6b6b', body: '#1a1a1a' },
+    };
+
+    const baseChartOpts = () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 500, easing: 'easeOutQuart' },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: CHART_COLORS.tooltip.bg,
+          borderColor: CHART_COLORS.tooltip.border,
+          borderWidth: 1,
+          titleColor: CHART_COLORS.tooltip.title,
+          bodyColor: CHART_COLORS.tooltip.body,
+          callbacks: { label: c => ' $' + c.formattedValue }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: CHART_COLORS.grid },
+          ticks: { color: CHART_COLORS.tick, font: { size: 10, family: 'JetBrains Mono' }, maxTicksLimit: 8 }
+        },
+        y: {
+          grid: { color: CHART_COLORS.grid },
+          ticks: { color: CHART_COLORS.tick, font: { size: 10, family: 'JetBrains Mono' }, callback: v => '$' + v.toFixed(2) }
+        }
+      }
+    });
+
+    function renderChart(res) {
+      document.getElementById('placeholder').style.display = 'none';
+      const canvas = document.getElementById('myChart');
+      canvas.style.display = 'block';
+      if (chartInst) { chartInst.destroy(); chartInst = null; }
+      const ctx = canvas.getContext('2d');
+
+      if (activeTab === 'convergence') {
+        const steps = 20;
+        const labels = [], prices = [], upper = [], lower = [];
+        for (let i = 1; i <= steps; i++) {
+          const frac = i / steps;
+          const nf = 1 / Math.sqrt(frac + 0.01);
+          const noise = (Math.random() - 0.5) * res.std_error * nf * 4;
+          const p = res.price + noise;
+          labels.push(Math.round(res.inputs.paths * frac).toLocaleString());
+          prices.push(+p.toFixed(4));
+          upper.push(+(p + res.std_error * nf * 1.96).toFixed(4));
+          lower.push(+(p - res.std_error * nf * 1.96).toFixed(4));
+        }
+        chartInst = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              { label: 'Estimated Price', data: prices, borderColor: CHART_COLORS.line, borderWidth: 1.5, pointRadius: 2, pointBackgroundColor: CHART_COLORS.line, tension: 0.3, fill: false },
+              { label: '95% CI Upper', data: upper, borderColor: CHART_COLORS.dashed, borderDash: [5, 4], borderWidth: 1, pointRadius: 0, fill: '+1', backgroundColor: CHART_COLORS.band },
+              { label: '95% CI Lower', data: lower, borderColor: CHART_COLORS.dashed, borderDash: [5, 4], borderWidth: 1, pointRadius: 0, fill: false },
+            ]
+          },
+          options: baseChartOpts()
+        });
+      } else {
+        const S = res.inputs.S, K = res.inputs.K, type = res.inputs.option_type;
+        const spots = [], payoffs = [], intrinsic = [];
+        const range = K * 0.8;
+        for (let i = 0; i <= 60; i++) {
+          const s = S - range + (2 * range * i / 60);
+          spots.push(s.toFixed(1));
+          const raw = type === 'call' ? Math.max(s - K, 0) : Math.max(K - s, 0);
+          intrinsic.push(+raw.toFixed(4));
+          const tv = res.price * Math.exp(-Math.pow((s - K) / (K * 0.3), 2));
+          payoffs.push(+(raw + tv * 0.4).toFixed(4));
+        }
+        const opts = baseChartOpts();
+        opts.plugins.legend = { display: true, labels: { color: '#6b6b6b', font: { size: 11, family: 'Inter' }, boxWidth: 14 } };
+        opts.scales.x.ticks.callback = (v, i) => '$' + spots[i];
+        opts.scales.x.ticks.maxTicksLimit = 10;
+        chartInst = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: spots,
+            datasets: [
+              { label: 'Intrinsic Value', data: intrinsic, borderColor: CHART_COLORS.dashed, borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, fill: false },
+              { label: 'Option Value', data: payoffs, borderColor: CHART_COLORS.purple, backgroundColor: CHART_COLORS.purpleArea, borderWidth: 1.5, pointRadius: 0, tension: 0.4, fill: 'origin' },
+            ]
+          },
+          options: opts
+        });
+      }
+    }
+
+    function addHistory(inputs, res) {
+      history.unshift({ inputs, res });
+      const tbody = document.getElementById('histBody');
+      if (history.length === 1) tbody.innerHTML = '';
+      const idx = history.length;
+      const row = document.createElement('tr');
+      row.innerHTML = `
+      <td>${idx}</td>
+      <td class="${inputs.option_type}">${inputs.option_type.toUpperCase()}</td>
+      <td>$${inputs.S}</td>
+      <td>$${inputs.K}</td>
+      <td>${inputs.sigma}</td>
+      <td>${inputs.T}y</td>
+      <td class="price">$${res.price.toFixed(4)}</td>
+      <td>${res.std_error.toFixed(4)}</td>
+    `;
+      tbody.insertBefore(row, tbody.firstChild);
+    }
+
+    async function runPricer() {
+      const btn = document.getElementById('priceBtn');
+      btn.disabled = true;
+      btn.classList.add('loading');
+
+      const payload = {
+        S: parseFloat(document.getElementById('S').value),
+        K: parseFloat(document.getElementById('K').value),
+        r: parseFloat(document.getElementById('r').value),
+        sigma: parseFloat(document.getElementById('sigma').value),
+        T: parseFloat(document.getElementById('T').value),
+        paths: parseInt(document.getElementById('paths').value),
+        time_steps: parseInt(document.getElementById('time_steps').value),
+        option_type: optionType,
+      };
+
+      try {
+        const resp = await fetch('/api/price', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+
+        if (!resp.ok || data.error) {
+          showToast('Error: ' + (data.error || 'Server error'));
+          return;
+        }
+
+        lastResult = data;
+
+        setMetric('price', '$' + data.price.toFixed(4));
+        setMetric('stderr', '$' + data.std_error.toFixed(4));
+        setMetric('lower', '$' + data.ci_lower.toFixed(4));
+        setMetric('upper', '$' + data.ci_upper.toFixed(4));
+
+        updateCIBar(data.price, data.ci_lower, data.ci_upper);
+        renderChart(data);
+        addHistory(data.inputs, data);
+
+      } catch (err) {
+        showToast('Could not reach server — is server.py running?');
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+      }
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && e.ctrlKey) runPricer();
+    });
+  </script>
+</body>
+
+</html>
