@@ -6,30 +6,12 @@ A European options pricer built on a C++ simulation engine, exposed through a Py
 
 ## Features
 
-- **Black-Scholes GBM simulation** — Geometric Brownian Motion path generation in C++
-- **Call & Put pricing** — European-style options with configurable parameters
-- **Statistical output** — Option price, standard error, and 95% confidence interval
-- **Convergence & payoff charts** — Visualise simulation quality and payoff profiles
-- **Run history** — In-session table of all pricing runs
-- **REST API** — Simple JSON endpoint for programmatic access
-
----
-
-## Project Structure
-
-```
-monte-carlo-pricer/
-├── core/
-│   ├── payoffs.h / payoffs.cpp      # Call & Put payoff functions
-│   ├── pricer.h  / pricer.cpp       # Monte Carlo pricing engine (MCResult)
-│   └── simulation.h / simulation.cpp # GBM path simulation
-├── frontend/
-│   └── index.html                   # Single-file browser UI (HTML + CSS + JS)
-├── main.cpp                         # CLI entry point for the C++ binary
-├── server.py                        # Flask server — bridges frontend ↔ C++ binary
-├── Makefile                         # Build the C++ binary
-└── .gitignore
-```
+- **Black-Scholes GBM simulation**: Geometric Brownian Motion path generation in C++
+- **Call & Put pricing**: European-style options with configurable parameters
+- **Statistical output**: Option price, standard error, and 95% confidence interval
+- **Convergence & payoff charts**: Visualise simulation quality and payoff profiles
+- **Run history**: In-session table of all pricing runs
+- **REST API**: Simple JSON endpoint for programmatic access
 
 ---
 
