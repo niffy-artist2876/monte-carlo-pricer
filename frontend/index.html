@@ -4,14 +4,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
   <title>Monte Carlo Options Pricer</title>
-  <meta name="description" content="A Monte Carlo options pricer powered by a C++ simulation engine." />
+  <meta name="description" content="A Monte Carlo options pricer powered by a parallelized C++ simulation engine." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
     rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
+    /* ═══════════════════════ TOKENS ═══════════════════════
+       Industrial Skeuomorphism. One machine, two lighting
+       conditions: workshop lights on (light) / off (dark).
+       Light source is always top-left at 45°. */
     *,
     *::before,
     *::after {
@@ -21,206 +26,345 @@
     }
 
     :root {
-      --bg: #f8f7f5;
-      --surface: #ffffff;
-      --border: #e5e2dc;
-      --text: #1a1a1a;
-      --text2: #6b6b6b;
-      --text3: #a8a8a8;
-      --accent: #2563eb;
-      --accent-bg: #eff4ff;
+      /* chassis materials */
+      --bg: #e0e5ec;            /* Level 0 — matte plastic chassis */
+      --panel: #f0f2f5;         /* Level +1 highlight surface */
+      --muted: #d1d9e6;         /* Level -1 — recessed wells */
+      --text: #2d3436;          /* charcoal ink */
+      --text2: #4a5568;         /* stamped labels */
+      --text3: #8a94a3;         /* faint metadata */
+      --accent: #ff4757;        /* safety orange-red: triggers & alerts only */
+      --accent-fg: #ffffff;
       --green: #16a34a;
-      --red: #dc2626;
-      --radius: 10px;
-      --radius-sm: 6px;
+      --green-led: #22c55e;
+
+      /* the lighting equation */
+      --sh-d: #babecc;          /* shadow half */
+      --sh-l: #ffffff;          /* highlight half */
+      --screw-d: rgba(0, 0, 0, 0.18);
+      --screw-l: rgba(255, 255, 255, 0.55);
+      --hotspot: rgba(255, 255, 255, 0.45);
+
+      /* neumorphic shadow system */
+      --shadow-card: 8px 8px 16px var(--sh-d), -8px -8px 16px var(--sh-l);
+      --shadow-float: 12px 12px 24px var(--sh-d), -12px -12px 24px var(--sh-l), inset 1px 1px 0 rgba(255, 255, 255, 0.5);
+      --shadow-pressed: inset 6px 6px 12px var(--sh-d), inset -6px -6px 12px var(--sh-l);
+      --shadow-recessed: inset 4px 4px 8px var(--sh-d), inset -4px -4px 8px var(--sh-l);
+      --shadow-key: 3px 3px 6px var(--sh-d), -3px -3px 6px var(--sh-l);
+      --shadow-btn: 4px 4px 8px rgba(166, 50, 60, 0.4), -4px -4px 8px rgba(255, 100, 110, 0.35);
+      --shadow-btn-pressed: inset 4px 4px 8px rgba(140, 30, 40, 0.5), inset -2px -2px 6px rgba(255, 120, 130, 0.35);
+
+      /* geometry & motion */
+      --r-sm: 4px;
+      --r-md: 8px;
+      --r-lg: 16px;
+      --r-xl: 24px;
+      --spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+      /* LCD readout windows (the one deliberately dark element) */
+      --screen: #141618;
+      --lcd: #ffb454;           /* amber phosphor */
+      --lcd-dim: #6b7680;
+
+      color-scheme: light;
     }
 
-    html {
-      scroll-behavior: smooth;
-    }
-
+    /* ═══════════════════════ CHASSIS ═══════════════════════ */
     body {
       font-family: 'Inter', sans-serif;
-      background: var(--bg);
+      background:
+        radial-gradient(1100px 700px at 12% -5%, var(--hotspot), transparent 60%),
+        var(--bg);
       color: var(--text);
       min-height: 100vh;
       font-size: 14px;
       line-height: 1.5;
     }
 
-    /* ── Layout ── */
+    /* matte-plastic micro-texture over everything */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 9998;
+      pointer-events: none;
+      opacity: 0.30;
+      mix-blend-mode: overlay;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+    }
+
     .wrapper {
-      max-width: 1100px;
+      max-width: 72rem;
       margin: 0 auto;
       padding: 0 28px 72px;
     }
 
-    /* ── Header ── */
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* stamped label — the "printed on the faceplate" look */
+    .stamp {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text2);
+    }
+
+    /* machined groove divider */
+    .groove {
+      height: 3px;
+      border-radius: 2px;
+      background: var(--muted);
+      box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.18), inset -1px -1px 1px rgba(255, 255, 255, 0.4);
+    }
+
+    /* ═══════════════════════ HEADER FACEPLATE ═══════════════════════ */
     header {
-      padding: 40px 0 32px;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 40px;
+      padding: 40px 0 26px;
       display: flex;
       align-items: flex-end;
       justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
     }
 
     .header-left h1 {
-      font-size: 1.35rem;
-      font-weight: 600;
+      font-size: 1.6rem;
+      font-weight: 800;
       letter-spacing: -0.02em;
       color: var(--text);
+      text-shadow: 0 1px 1px var(--sh-l);
     }
 
     .header-left p {
-      font-size: 0.8rem;
+      margin-top: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
       color: var(--text2);
-      margin-top: 4px;
     }
 
-    .status-dot {
+    .header-right {
       display: flex;
       align-items: center;
-      gap: 7px;
-      font-size: 0.75rem;
-      color: var(--text2);
+      gap: 20px;
     }
 
-    .status-dot::before {
-      content: '';
-      width: 7px;
-      height: 7px;
-      background: var(--green);
+    /* LED — always paired with a stamped label */
+    .led {
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
+      background: var(--muted);
+      box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.25);
+      flex: none;
     }
 
-    /* ── Grid ── */
+    .led.on-green {
+      background: var(--green-led);
+      box-shadow: 0 0 10px 2px rgba(34, 197, 94, 0.6);
+      animation: led-breathe 2.4s ease-in-out infinite;
+    }
+
+    .led.on-red {
+      background: var(--accent);
+      box-shadow: 0 0 10px 2px rgba(255, 71, 87, 0.6);
+    }
+
+    @keyframes led-breathe {
+      50% {
+        opacity: 0.55;
+      }
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ═══════════════════════ GRID ═══════════════════════ */
     .grid {
       display: grid;
-      grid-template-columns: 340px 1fr;
+      grid-template-columns: 350px 1fr;
       gap: 28px;
       align-items: start;
+      margin-top: 32px;
     }
 
-    @media (max-width: 860px) {
+    @media (max-width: 900px) {
       .grid {
         grid-template-columns: 1fr;
       }
     }
 
-    /* ── Card ── */
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 24px;
-    }
-
-    .card+.card {
-      margin-top: 16px;
-    }
-
-    .card-title {
-      font-size: 0.7rem;
-      font-weight: 600;
-      color: var(--text2);
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      margin-bottom: 20px;
-    }
-
-    /* ── Option type toggle ── */
-    .toggle {
-      display: flex;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      overflow: hidden;
-      margin-bottom: 22px;
-    }
-
-    .toggle button {
-      flex: 1;
-      padding: 9px;
-      border: none;
-      background: transparent;
-      color: var(--text2);
-      font-family: inherit;
-      font-size: 0.82rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s;
-    }
-
-    .toggle button.active {
-      background: var(--text);
-      color: #fff;
-    }
-
-    .toggle button:not(.active):hover {
+    /* ═══════════════════════ MODULE (bolted panel) ═══════════════════════ */
+    .module {
+      position: relative;
       background: var(--bg);
+      border-radius: var(--r-lg);
+      box-shadow: var(--shadow-card);
+      padding: 26px;
     }
 
-    /* ── Fields ── */
+    /* corner screws — the DNA. Four indents + four glints. */
+    .module::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      background-image:
+        radial-gradient(circle at 13px 13px, var(--screw-d) 2.5px, transparent 3.5px),
+        radial-gradient(circle at calc(100% - 13px) 13px, var(--screw-d) 2.5px, transparent 3.5px),
+        radial-gradient(circle at 13px calc(100% - 13px), var(--screw-d) 2.5px, transparent 3.5px),
+        radial-gradient(circle at calc(100% - 13px) calc(100% - 13px), var(--screw-d) 2.5px, transparent 3.5px),
+        radial-gradient(circle at 12px 12px, var(--screw-l) 1px, transparent 2px),
+        radial-gradient(circle at calc(100% - 14px) 12px, var(--screw-l) 1px, transparent 2px),
+        radial-gradient(circle at 12px calc(100% - 14px), var(--screw-l) 1px, transparent 2px),
+        radial-gradient(circle at calc(100% - 14px) calc(100% - 14px), var(--screw-l) 1px, transparent 2px);
+    }
+
+    .module-title {
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* ventilation slots */
+    .vents {
+      display: flex;
+      gap: 4px;
+    }
+
+    .vents span {
+      display: block;
+      width: 4px;
+      height: 22px;
+      border-radius: 999px;
+      background: var(--muted);
+      box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.15);
+    }
+
+    /* ═══════════════════════ CALL / PUT KEYS ═══════════════════════ */
+    .keys {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .key {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 48px;
+      border: none;
+      border-radius: var(--r-md);
+      background: var(--bg);
+      box-shadow: var(--shadow-key);
+      color: var(--text2);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: box-shadow 150ms var(--spring), transform 150ms var(--spring), color 150ms;
+    }
+
+    .key .led {
+      width: 8px;
+      height: 8px;
+    }
+
+    .key.active {
+      box-shadow: var(--shadow-pressed);
+      transform: translateY(1px);
+      color: var(--text);
+    }
+
+    .key.active#btnCall .led {
+      background: var(--green-led);
+      box-shadow: 0 0 8px 1px rgba(34, 197, 94, 0.7);
+    }
+
+    .key.active#btnPut .led {
+      background: var(--accent);
+      box-shadow: 0 0 8px 1px rgba(255, 71, 87, 0.7);
+    }
+
+    /* ═══════════════════════ DATA SLOTS (inputs) ═══════════════════════ */
     .fields {
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 18px;
     }
 
     .field-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      gap: 12px;
     }
 
     .field {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 6px;
     }
 
     .field label {
-      font-size: 0.75rem;
-      font-weight: 500;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
       color: var(--text2);
     }
 
-    .field input,
-    .field select {
+    .field input {
       width: 100%;
-      padding: 8px 10px;
+      min-height: 44px;
+      padding: 8px 14px;
       background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
+      border: none;
+      border-radius: var(--r-md);
+      box-shadow: var(--shadow-recessed);
       color: var(--text);
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.82rem;
+      font-size: 0.85rem;
       outline: none;
-      transition: border-color 0.15s;
+      transition: box-shadow 200ms ease;
     }
 
-    .field input:focus {
-      border-color: var(--accent);
-      background: #fff;
+    .field input:focus-visible {
+      box-shadow: var(--shadow-recessed), 0 0 0 2px var(--accent);
     }
 
-    /* ── Sliders ── */
-    .slider-group {
+    /* ═══════════════════════ FADERS (sliders) ═══════════════════════ */
+    .fader {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 8px;
     }
 
-    .slider-header {
+    .fader-head {
       display: flex;
       justify-content: space-between;
-      font-size: 0.75rem;
-      font-weight: 500;
-      color: var(--text2);
+      align-items: baseline;
     }
 
-    .slider-val {
+    .fader-val {
       font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      font-weight: 500;
       color: var(--text);
     }
 
@@ -228,248 +372,355 @@
       -webkit-appearance: none;
       appearance: none;
       width: 100%;
-      height: 2px;
-      background: var(--border);
-      border-radius: 1px;
-      outline: none;
+      height: 22px;
+      background: transparent;
       cursor: pointer;
+    }
+
+    input[type=range]::-webkit-slider-runnable-track {
+      height: 8px;
+      border-radius: 999px;
+      background: var(--muted);
+      box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.18), inset -1px -1px 2px rgba(255, 255, 255, 0.35);
     }
 
     input[type=range]::-webkit-slider-thumb {
       -webkit-appearance: none;
-      width: 14px;
-      height: 14px;
-      background: var(--text);
+      width: 22px;
+      height: 22px;
+      margin-top: -7px;
       border-radius: 50%;
-      cursor: pointer;
-      transition: transform 0.1s;
+      background: radial-gradient(circle at 35% 35%, var(--panel), var(--bg));
+      box-shadow: 3px 3px 6px var(--sh-d), -2px -2px 5px var(--sh-l);
+      transition: transform 150ms var(--spring);
     }
 
     input[type=range]::-webkit-slider-thumb:hover {
-      transform: scale(1.15);
+      transform: scale(1.1);
     }
 
-    /* ── Run button ── */
+    input[type=range]:active::-webkit-slider-thumb {
+      transform: scale(0.96);
+    }
+
+    input[type=range]::-moz-range-track {
+      height: 8px;
+      border-radius: 999px;
+      background: var(--muted);
+      box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.18);
+    }
+
+    input[type=range]::-moz-range-thumb {
+      width: 22px;
+      height: 22px;
+      border: none;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, var(--panel), var(--bg));
+      box-shadow: 3px 3px 6px var(--sh-d), -2px -2px 5px var(--sh-l);
+    }
+
+    /* ═══════════════════════ TRIGGER (run button) ═══════════════════════ */
     #priceBtn {
       width: 100%;
-      margin-top: 6px;
-      padding: 11px;
-      background: var(--text);
-      border: none;
-      border-radius: var(--radius-sm);
-      color: #fff;
+      margin-top: 8px;
+      min-height: 52px;
+      padding: 12px;
+      background: var(--accent);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: var(--r-lg);
+      color: var(--accent-fg);
       font-family: 'Inter', sans-serif;
       font-size: 0.85rem;
-      font-weight: 500;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
       cursor: pointer;
-      transition: opacity 0.15s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
+      box-shadow: var(--shadow-btn);
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+      transition: transform 150ms var(--spring), box-shadow 150ms var(--spring), filter 150ms;
     }
 
-    #priceBtn:hover {
-      opacity: 0.85;
+    #priceBtn:hover:not(:disabled) {
+      filter: brightness(1.08);
+    }
+
+    #priceBtn:active:not(:disabled) {
+      transform: translateY(2px);
+      box-shadow: var(--shadow-btn-pressed);
+    }
+
+    #priceBtn:focus-visible {
+      outline: 2px solid var(--text);
+      outline-offset: 3px;
     }
 
     #priceBtn:disabled {
-      opacity: 0.45;
+      opacity: 0.55;
       cursor: not-allowed;
     }
 
-    .spinner {
-      display: none;
-      width: 14px;
-      height: 14px;
-      border: 2px solid rgba(255, 255, 255, 0.35);
-      border-top-color: #fff;
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
+    .hint {
+      margin-top: 12px;
+      text-align: center;
+      font-size: 0.7rem;
+      color: var(--text3);
     }
 
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
+    kbd {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.62rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: var(--r-sm);
+      background: var(--bg);
+      box-shadow: 2px 2px 4px var(--sh-d), -2px -2px 4px var(--sh-l);
+      color: var(--text2);
     }
 
-    #priceBtn.loading .btn-text {
-      display: none;
-    }
-
-    #priceBtn.loading .spinner {
-      display: block;
-    }
-
-    /* ── Right column ── */
+    /* ═══════════════════════ READOUTS (LCD instruments) ═══════════════════════ */
     .right {
       display: flex;
       flex-direction: column;
+      gap: 24px;
+    }
+
+    .readouts {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
       gap: 16px;
     }
 
-    /* ── Result metrics ── */
-    .metrics {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 1px;
-      background: var(--border);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-    }
-
     @media (max-width: 640px) {
-      .metrics {
+      .readouts {
         grid-template-columns: 1fr 1fr;
       }
     }
 
-    .metric {
-      background: var(--surface);
-      padding: 20px 16px;
-    }
-
-    .metric-label {
-      font-size: 0.7rem;
-      font-weight: 500;
-      color: var(--text3);
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      margin-bottom: 8px;
-    }
-
-    .metric-value {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 1.25rem;
-      font-weight: 500;
-      color: var(--text);
-      transition: color 0.3s;
-    }
-
-    .metric-value.dash {
-      color: var(--text3);
-      font-size: 1rem;
-    }
-
-    .metric-value.updated {
-      animation: pop 0.35s ease;
-    }
-
-    @keyframes pop {
-      0% {
-        transform: scale(1.04);
-      }
-
-      100% {
-        transform: scale(1);
-      }
-    }
-
-    .metric-sub {
-      font-size: 0.68rem;
-      color: var(--text3);
-      margin-top: 3px;
-    }
-
-    /* Primary price highlight */
-    .metric.primary .metric-value {
-      color: var(--accent);
-      font-size: 1.45rem;
-    }
-
-    /* ── CI bar ── */
-    .ci-bar-track {
-      position: relative;
-      height: 6px;
+    .readout {
       background: var(--bg);
-      border-radius: 3px;
-      margin-top: 14px;
+      border-radius: var(--r-lg);
+      box-shadow: var(--shadow-card);
+      padding: 14px 16px 12px;
     }
 
-    .ci-bar-fill {
+    .readout .stamp {
+      font-size: 0.6rem;
+    }
+
+    .lcd {
+      position: relative;
+      margin-top: 8px;
+      padding: 9px 12px;
+      background: var(--screen);
+      border-radius: var(--r-md);
+      box-shadow: inset 3px 3px 8px rgba(0, 0, 0, 0.6), inset -1px -1px 2px rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+    }
+
+    .lcd::after {
+      content: '';
       position: absolute;
-      height: 100%;
-      background: var(--accent);
-      opacity: 0.25;
-      border-radius: 3px;
-      transition: left 0.5s ease, width 0.5s ease;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+      background-size: 100% 3px;
+      opacity: 0.4;
+    }
+
+    .lcd-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.15rem;
+      font-weight: 500;
+      color: var(--lcd);
+      text-shadow: 0 0 8px rgba(255, 180, 84, 0.35);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .lcd-value.dash {
+      color: var(--lcd-dim);
+      text-shadow: none;
+    }
+
+    .readout.primary .lcd-value {
+      font-size: 1.35rem;
+    }
+
+    .readout-sub {
+      margin-top: 7px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.58rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text3);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ═══════════════════════ CI GAUGE ═══════════════════════ */
+    .gauge-track {
+      position: relative;
+      height: 14px;
+      margin-top: 16px;
+      border-radius: 999px;
+      background: var(--muted);
+      box-shadow: inset 3px 3px 6px rgba(0, 0, 0, 0.2), inset -2px -2px 4px rgba(255, 255, 255, 0.35);
+    }
+
+    .gauge-fill {
+      position: absolute;
+      top: 3px;
+      bottom: 3px;
       left: 25%;
       width: 50%;
-    }
-
-    .ci-bar-needle {
-      position: absolute;
-      top: -4px;
-      width: 2px;
-      height: 14px;
+      border-radius: 999px;
       background: var(--accent);
-      border-radius: 1px;
-      transition: left 0.5s ease;
-      left: 50%;
+      opacity: 0.35;
+      transition: left 300ms var(--spring), width 300ms var(--spring);
     }
 
-    .ci-labels {
+    .gauge-needle {
+      position: absolute;
+      top: -5px;
+      left: 50%;
+      width: 4px;
+      height: 24px;
+      border-radius: 2px;
+      background: var(--accent);
+      box-shadow: 0 0 8px rgba(255, 71, 87, 0.55), 1px 1px 2px rgba(0, 0, 0, 0.3);
+      transition: left 300ms var(--spring);
+    }
+
+    .gauge-labels {
       display: flex;
       justify-content: space-between;
+      margin-top: 12px;
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.68rem;
       color: var(--text2);
-      margin-top: 8px;
     }
 
-    .ci-center {
+    .gauge-labels .mid {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    /* ═══════════════════════ PLOTTER DISPLAY ═══════════════════════ */
+    .crt {
+      position: relative;
+      background: var(--bg);
+      border-radius: var(--r-xl);
+      padding: 16px;
+      box-shadow: var(--shadow-card);
+    }
+
+    .crt-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .crt-tabs {
+      display: flex;
+      gap: 8px;
+    }
+
+    .crt-tab {
+      min-height: 34px;
+      padding: 6px 14px;
+      border: none;
+      border-radius: var(--r-sm);
+      background: var(--bg);
+      box-shadow: var(--shadow-key);
+      color: var(--text2);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      cursor: pointer;
+      transition: box-shadow 150ms var(--spring), transform 150ms var(--spring), color 150ms;
+    }
+
+    .crt-tab.active {
+      box-shadow: var(--shadow-pressed);
+      transform: translateY(1px);
       color: var(--accent);
     }
 
-    /* ── Chart ── */
-    .chart-tabs {
+    .crt-tab:not(.active):hover {
+      color: var(--text);
+    }
+
+    .crt-pwr {
       display: flex;
-      gap: 4px;
-      margin-bottom: 18px;
+      align-items: center;
+      gap: 7px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.58rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--text3);
     }
 
-    .chart-tab {
-      padding: 5px 12px;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text2);
-      font-family: inherit;
-      font-size: 0.75rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.15s;
+    .crt-pwr .led {
+      width: 8px;
+      height: 8px;
     }
 
-    .chart-tab.active {
-      background: var(--text);
-      border-color: var(--text);
-      color: #fff;
-    }
-
-    .chart-tab:not(.active):hover {
-      background: var(--bg);
+    .screen {
+      position: relative;
+      background: var(--panel);
+      border-radius: 14px;
+      box-shadow: var(--shadow-recessed);
+      padding: 14px;
+      overflow: hidden;
     }
 
     .chart-container {
       position: relative;
-      height: 220px;
+      height: 250px;
     }
 
     .chart-placeholder {
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 220px;
+      height: 250px;
       color: var(--text3);
-      font-size: 0.8rem;
-      gap: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      text-align: center;
     }
 
-    /* ── History table ── */
+    .chart-placeholder span::after {
+      content: '▮';
+      margin-left: 6px;
+      animation: cursor-blink 1.2s steps(1) infinite;
+    }
+
+    @keyframes cursor-blink {
+      50% {
+        opacity: 0;
+      }
+    }
+
+    .chart-note {
+      margin-top: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text3);
+    }
+
+    /* ═══════════════════════ LOG (history) ═══════════════════════ */
     .table-wrap {
       overflow-x: auto;
     }
@@ -483,78 +734,107 @@
     th {
       text-align: left;
       padding: 6px 10px;
+      font-family: 'JetBrains Mono', monospace;
       color: var(--text3);
-      font-weight: 600;
-      font-size: 0.67rem;
+      font-weight: 700;
+      font-size: 0.6rem;
       text-transform: uppercase;
-      letter-spacing: 0.07em;
-      border-bottom: 1px solid var(--border);
+      letter-spacing: 0.08em;
+      border-bottom: 2px solid var(--muted);
     }
 
     td {
       padding: 9px 10px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--muted);
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.77rem;
       color: var(--text2);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
 
     tr:last-child td {
       border-bottom: none;
     }
 
-    tr:hover td {
-      background: var(--bg);
+    tbody tr {
+      transition: background 150ms;
+    }
+
+    tbody tr:hover td {
+      background: var(--muted);
       color: var(--text);
     }
 
     td.call {
       color: var(--green);
-      font-weight: 500;
+      font-weight: 700;
     }
 
     td.put {
-      color: var(--red);
-      font-weight: 500;
+      color: var(--accent);
+      font-weight: 700;
     }
 
     td.price {
-      color: var(--accent);
-      font-weight: 500;
+      color: var(--text);
+      font-weight: 700;
     }
 
     .empty-row {
       text-align: center;
       padding: 28px;
       color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.68rem;
     }
 
-    /* ── Toast ── */
+    /* ═══════════════════════ ALERT LAMP (toast) ═══════════════════════ */
     #toast {
       position: fixed;
       bottom: 24px;
       left: 50%;
-      transform: translateX(-50%) translateY(80px);
-      background: #fff;
-      border: 1px solid #fca5a5;
-      color: var(--red);
-      padding: 10px 20px;
-      border-radius: 8px;
-      font-size: 0.82rem;
-      transition: transform 0.3s ease;
-      z-index: 99;
+      transform: translateX(-50%);
+      display: none;
+      align-items: center;
+      gap: 10px;
+      background: #2d3436;
+      border: 1px solid rgba(255, 71, 87, 0.5);
+      color: #e0e5ec;
+      padding: 12px 20px;
+      border-radius: var(--r-md);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      z-index: 9999;
       white-space: nowrap;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 0 12px rgba(255, 71, 87, 0.25);
     }
 
     #toast.show {
-      transform: translateX(-50%) translateY(0);
+      display: flex;
+      animation: toast-in 200ms var(--spring);
     }
 
-    /* ── Scrollbar ── */
+    #toast .led {
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+      box-shadow: 0 0 8px 1px rgba(255, 71, 87, 0.8);
+      animation: led-breathe 1s ease-in-out infinite;
+    }
+
+    @keyframes toast-in {
+      from {
+        transform: translateX(-50%) translateY(16px);
+        opacity: 0;
+      }
+    }
+
+    /* ═══════════════════════ SCROLLBAR ═══════════════════════ */
     ::-webkit-scrollbar {
-      width: 5px;
-      height: 5px;
+      width: 6px;
+      height: 6px;
     }
 
     ::-webkit-scrollbar-track {
@@ -562,8 +842,19 @@
     }
 
     ::-webkit-scrollbar-thumb {
-      background: var(--border);
+      background: var(--sh-d);
       border-radius: 3px;
+    }
+
+    /* ═══════════════════════ REDUCED MOTION ═══════════════════════ */
+    @media (prefers-reduced-motion: reduce) {
+
+      *,
+      *::before,
+      *::after {
+        animation: none !important;
+        transition: none !important;
+      }
     }
   </style>
 </head>
@@ -571,147 +862,175 @@
 <body>
   <div class="wrapper">
 
-    <!-- Header -->
+    <!-- ── Header faceplate ── -->
     <header>
       <div class="header-left">
         <h1>Monte Carlo Options Pricer</h1>
-        <p>Black-Scholes GBM · C++ simulation engine</p>
+        <p>Black-Scholes GBM · Parallelized C++ Engine</p>
       </div>
-      <div class="status-dot">C++ engine active</div>
+      <div class="header-right">
+        <div class="status">
+          <span class="led" id="statusLed"></span>
+          <span class="stamp" id="statusText">Checking…</span>
+        </div>
+      </div>
     </header>
+    <div class="groove"></div>
 
     <div class="grid">
 
-      <!-- LEFT: Controls -->
+      <!-- ── LEFT: control module ── -->
       <div class="left">
-        <div class="card">
-          <div class="card-title">Parameters</div>
+        <div class="module">
+          <div class="module-title">
+            <span class="stamp">Parameters</span>
+            <div class="vents" aria-hidden="true"><span></span><span></span><span></span></div>
+          </div>
 
-          <div class="toggle">
-            <button id="btnCall" class="active" onclick="setType('call')">Call</button>
-            <button id="btnPut" onclick="setType('put')">Put</button>
+          <div class="keys" role="group" aria-label="Option type">
+            <button id="btnCall" class="key active" onclick="setType('call')">
+              <span class="led"></span>Call
+            </button>
+            <button id="btnPut" class="key" onclick="setType('put')">
+              <span class="led"></span>Put
+            </button>
           </div>
 
           <div class="fields">
             <div class="field-row">
               <div class="field">
-                <label>Spot Price (S)</label>
+                <label for="S">Spot (S)</label>
                 <input type="number" id="S" value="100" min="1" step="1" />
               </div>
               <div class="field">
-                <label>Strike Price (K)</label>
+                <label for="K">Strike (K)</label>
                 <input type="number" id="K" value="100" min="1" step="1" />
               </div>
             </div>
 
             <div class="field-row">
               <div class="field">
-                <label>Risk-Free Rate (r)</label>
+                <label for="r">Rate (r)</label>
                 <input type="number" id="r" value="0.05" min="0" max="1" step="0.001" />
               </div>
               <div class="field">
-                <label>Time to Expiry (yrs)</label>
+                <label for="T">Expiry (yrs)</label>
                 <input type="number" id="T" value="1.0" min="0.01" step="0.01" />
               </div>
             </div>
 
-            <div class="slider-group">
-              <div class="slider-header">
-                <span>Volatility (σ)</span>
-                <span class="slider-val" id="sigmaVal">0.20</span>
+            <div class="fader">
+              <div class="fader-head">
+                <label class="stamp" for="sigma">Volatility σ</label>
+                <span class="fader-val" id="sigmaVal">0.20</span>
               </div>
               <input type="range" id="sigma" min="0.01" max="1.0" step="0.01" value="0.20"
                 oninput="document.getElementById('sigmaVal').textContent = parseFloat(this.value).toFixed(2)" />
             </div>
 
-            <div class="slider-group">
-              <div class="slider-header">
-                <span>Simulation Paths</span>
-                <span class="slider-val" id="pathsVal">100,000</span>
+            <div class="fader">
+              <div class="fader-head">
+                <label class="stamp" for="paths">Sim Paths</label>
+                <span class="fader-val" id="pathsVal">100,000</span>
               </div>
-              <input type="range" id="paths" min="1000" max="500000" step="1000" value="100000"
+              <input type="range" id="paths" min="1000" max="1000000" step="1000" value="100000"
                 oninput="document.getElementById('pathsVal').textContent = parseInt(this.value).toLocaleString()" />
             </div>
 
-            <div class="slider-group">
-              <div class="slider-header">
-                <span>Time Steps</span>
-                <span class="slider-val" id="stepsVal">252</span>
+            <div class="fader">
+              <div class="fader-head">
+                <label class="stamp" for="time_steps">Time Steps</label>
+                <span class="fader-val" id="stepsVal">252</span>
               </div>
               <input type="range" id="time_steps" min="10" max="504" step="2" value="252"
                 oninput="document.getElementById('stepsVal').textContent = this.value" />
             </div>
 
-            <button id="priceBtn" onclick="runPricer()">
-              <span class="btn-text">Price Option</span>
-              <div class="spinner"></div>
-            </button>
+            <button id="priceBtn" onclick="runPricer()">Price Option</button>
+            <div class="hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> to run</div>
           </div>
         </div>
       </div>
 
-      <!-- RIGHT: Results -->
+      <!-- ── RIGHT: instrument bank ── -->
       <div class="right">
 
-        <!-- Metrics row -->
-        <div class="metrics">
-          <div class="metric primary" id="card-price">
-            <div class="metric-label">Option Price</div>
-            <div class="metric-value dash" id="val-price">—</div>
-            <div class="metric-sub">Discounted mean payoff</div>
+        <!-- LCD readouts -->
+        <div class="readouts">
+          <div class="readout primary">
+            <div class="stamp">Option Price</div>
+            <div class="lcd">
+              <div class="lcd-value dash" id="val-price">——</div>
+            </div>
+            <div class="readout-sub" id="sub-price">Discounted mean payoff</div>
           </div>
-          <div class="metric" id="card-stderr">
-            <div class="metric-label">Std Error</div>
-            <div class="metric-value dash" id="val-stderr">—</div>
-            <div class="metric-sub">Monte Carlo SE</div>
+          <div class="readout">
+            <div class="stamp">Std Error</div>
+            <div class="lcd">
+              <div class="lcd-value dash" id="val-stderr">——</div>
+            </div>
+            <div class="readout-sub">Monte Carlo SE</div>
           </div>
-          <div class="metric" id="card-lower">
-            <div class="metric-label">CI Lower</div>
-            <div class="metric-value dash" id="val-lower">—</div>
-            <div class="metric-sub">95% confidence</div>
+          <div class="readout">
+            <div class="stamp">Black-Scholes</div>
+            <div class="lcd">
+              <div class="lcd-value dash" id="val-bs">——</div>
+            </div>
+            <div class="readout-sub" id="sub-bs">Analytic reference</div>
           </div>
-          <div class="metric" id="card-upper">
-            <div class="metric-label">CI Upper</div>
-            <div class="metric-value dash" id="val-upper">—</div>
-            <div class="metric-sub">95% confidence</div>
+          <div class="readout">
+            <div class="stamp">Engine Time</div>
+            <div class="lcd">
+              <div class="lcd-value dash" id="val-time">——</div>
+            </div>
+            <div class="readout-sub">Round-trip incl. HTTP</div>
           </div>
         </div>
 
-        <!-- Confidence Interval -->
-        <div class="card">
-          <div class="card-title">Confidence Interval</div>
-          <div class="ci-bar-track">
-            <div class="ci-bar-fill" id="ciBarFill"></div>
-            <div class="ci-bar-needle" id="ciBarNeedle"></div>
+        <!-- CI gauge -->
+        <div class="module">
+          <div class="module-title">
+            <span class="stamp">95% Confidence Interval</span>
           </div>
-          <div class="ci-labels">
+          <div class="gauge-track">
+            <div class="gauge-fill" id="ciBarFill"></div>
+            <div class="gauge-needle" id="ciBarNeedle"></div>
+          </div>
+          <div class="gauge-labels">
             <span id="ciLabelLow">—</span>
-            <span class="ci-center">price</span>
+            <span class="mid" id="ciLabelMid">price</span>
             <span id="ciLabelHigh">—</span>
           </div>
         </div>
 
-        <!-- Charts -->
-        <div class="card">
-          <div class="card-title">Visualisation</div>
-          <div class="chart-tabs">
-            <button class="chart-tab active" id="tab-convergence"
-              onclick="switchTab('convergence')">Convergence</button>
-            <button class="chart-tab" id="tab-payoff" onclick="switchTab('payoff')">Payoff Profile</button>
-          </div>
-          <div class="chart-container" id="chart-area">
-            <div class="chart-placeholder" id="placeholder">
-              <span>Run a simulation to see results</span>
+        <!-- CRT display -->
+        <div class="crt">
+          <div class="crt-head">
+            <div class="crt-tabs">
+              <button class="crt-tab active" id="tab-convergence" onclick="switchTab('convergence')">Convergence</button>
+              <button class="crt-tab" id="tab-paths" onclick="switchTab('paths')">Sample Paths</button>
             </div>
-            <canvas id="myChart" style="display:none;"></canvas>
+            <div class="crt-pwr"><span class="led on-green" id="crtLed"></span>PWR</div>
           </div>
+          <div class="screen">
+            <div class="chart-container">
+              <div class="chart-placeholder" id="placeholder">
+                <span>Awaiting simulation</span>
+              </div>
+              <canvas id="chartCanvas" style="display:none;"></canvas>
+            </div>
+          </div>
+          <div class="chart-note" id="chartNote"></div>
         </div>
 
-        <!-- History -->
-        <div class="card">
-          <div class="card-title">Run History</div>
+        <!-- Run log -->
+        <div class="module">
+          <div class="module-title">
+            <span class="stamp">Run Log</span>
+            <div class="vents" aria-hidden="true"><span></span><span></span><span></span></div>
+          </div>
           <div class="table-wrap">
-            <table id="histTable">
+            <table>
               <thead>
                 <tr>
                   <th>#</th>
@@ -720,13 +1039,15 @@
                   <th>K</th>
                   <th>σ</th>
                   <th>T</th>
+                  <th>Paths</th>
                   <th>Price</th>
                   <th>SE</th>
+                  <th>ms</th>
                 </tr>
               </thead>
               <tbody id="histBody">
                 <tr>
-                  <td colspan="8" class="empty-row">No runs yet</td>
+                  <td colspan="10" class="empty-row">No runs logged</td>
                 </tr>
               </tbody>
             </table>
@@ -737,46 +1058,105 @@
     </div><!-- /grid -->
   </div><!-- /wrapper -->
 
-  <!-- Toast -->
-  <div id="toast"></div>
+  <!-- Alert lamp -->
+  <div id="toast" role="alert"><span class="led"></span><span id="toastMsg"></span></div>
 
   <script>
+    'use strict';
+
+    /* ─────────────────────────── State ─────────────────────────── */
     let optionType = 'call';
     let history = [];
     let chartInst = null;
     let activeTab = 'convergence';
-    let lastResult = null;
+    let lastResult = null;      // last main pricing response
+    let convergenceData = null; // real sweep results for lastResult's inputs
+    let sweepGeneration = 0;    // cancels stale sweeps when a new run starts
+    let sweepActive = false;    // true while a convergence sweep is in flight
+    let toastTimer = null;
 
+    /* Chart tokens — the plotter panel palette (validated on #f0f2f5). */
+    const SCREEN = {
+      blue: '#2563eb',
+      blueWash: 'rgba(37, 99, 235, 0.08)',
+      bluePale: 'rgba(37, 99, 235, 0.35)',
+      neutral: '#6b6b6b',
+      grid: 'rgba(0, 0, 0, 0.06)',
+      tick: '#6b7680',
+      surface: '#f0f2f5',
+      legend: '#4a5568',
+      tooltip: { bg: '#ffffff', border: '#babecc', title: '#4a5568', body: '#2d3436' },
+    };
+
+    const MONO = "'JetBrains Mono', monospace";
+    const SANS = "'Inter', sans-serif";
+    const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    /* ─────────────── Black-Scholes analytic (client-side) ─────────────── */
+    function normCdf(x) {
+      // Abramowitz & Stegun 7.1.26 via erf
+      const sign = x < 0 ? -1 : 1;
+      const ax = Math.abs(x) / Math.SQRT2;
+      const t = 1 / (1 + 0.3275911 * ax);
+      const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-ax * ax);
+      return 0.5 * (1 + sign * y);
+    }
+
+    function bsPrice(S, K, r, sigma, T, type) {
+      if (T <= 0 || sigma <= 0) {
+        return type === 'call' ? Math.max(S - K, 0) : Math.max(K - S, 0);
+      }
+      const sqT = Math.sqrt(T);
+      const d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * sqT);
+      const d2 = d1 - sigma * sqT;
+      const df = Math.exp(-r * T);
+      return type === 'call'
+        ? S * normCdf(d1) - K * df * normCdf(d2)
+        : K * df * normCdf(-d2) - S * normCdf(-d1);
+    }
+
+    /* ─────────────────────────── UI helpers ─────────────────────────── */
     function setType(t) {
       optionType = t;
       document.getElementById('btnCall').classList.toggle('active', t === 'call');
       document.getElementById('btnPut').classList.toggle('active', t === 'put');
     }
 
-    function switchTab(tab) {
-      activeTab = tab;
-      document.querySelectorAll('.chart-tab').forEach(b => b.classList.remove('active'));
-      document.getElementById('tab-' + tab).classList.add('active');
-      if (lastResult) renderChart(lastResult);
-    }
-
     function showToast(msg) {
+      document.getElementById('toastMsg').textContent = msg;
       const t = document.getElementById('toast');
-      t.textContent = msg;
       t.classList.add('show');
-      setTimeout(() => t.classList.remove('show'), 3500);
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
     }
 
-    function setMetric(id, fmt) {
+    function setMetric(id, text) {
       const el = document.getElementById('val-' + id);
-      el.textContent = fmt;
-      el.classList.remove('dash', 'updated');
-      void el.offsetWidth;
-      el.classList.add('updated');
+      el.textContent = text;
+      el.classList.remove('dash');
+    }
+
+    function setStatus(state, label) {
+      const led = document.getElementById('statusLed');
+      led.classList.remove('on-green', 'on-red');
+      if (state === 'online') led.classList.add('on-green');
+      if (state === 'offline') led.classList.add('on-red');
+      document.getElementById('statusText').textContent = label;
+    }
+
+    async function checkServer() {
+      try {
+        const resp = await fetch('/', { method: 'HEAD' });
+        if (resp.ok) { setStatus('online', 'Engine Online'); return true; }
+        setStatus('offline', 'Server Error');
+      } catch {
+        setStatus('offline', 'Server Offline');
+      }
+      return false;
     }
 
     function updateCIBar(price, lower, upper) {
-      const pad = (upper - lower) * 0.5;
+      const pad = Math.max((upper - lower) * 0.5, 1e-9);
       const min = lower - pad, max = upper + pad;
       const range = max - min;
       const pct = v => ((v - min) / range * 100).toFixed(2) + '%';
@@ -785,134 +1165,249 @@
       document.getElementById('ciBarFill').style.width = ((upper - lower) / range * 100).toFixed(2) + '%';
       document.getElementById('ciBarNeedle').style.left = pct(price);
       document.getElementById('ciLabelLow').textContent = '$' + lower.toFixed(4);
+      document.getElementById('ciLabelMid').textContent = '$' + price.toFixed(4);
       document.getElementById('ciLabelHigh').textContent = '$' + upper.toFixed(4);
     }
 
-    const CHART_COLORS = {
-      line: '#2563eb',
-      band: 'rgba(37,99,235,0.07)',
-      dashed: 'rgba(37,99,235,0.3)',
-      purple: '#7c3aed',
-      purpleArea: 'rgba(124,58,237,0.07)',
-      grid: 'rgba(0,0,0,0.05)',
-      tick: '#a8a8a8',
-      tooltip: { bg: '#fff', border: '#e5e2dc', title: '#6b6b6b', body: '#1a1a1a' },
-    };
-
-    const baseChartOpts = () => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 500, easing: 'easeOutQuart' },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: CHART_COLORS.tooltip.bg,
-          borderColor: CHART_COLORS.tooltip.border,
-          borderWidth: 1,
-          titleColor: CHART_COLORS.tooltip.title,
-          bodyColor: CHART_COLORS.tooltip.body,
-          callbacks: { label: c => ' $' + c.formattedValue }
-        }
-      },
-      scales: {
-        x: {
-          grid: { color: CHART_COLORS.grid },
-          ticks: { color: CHART_COLORS.tick, font: { size: 10, family: 'JetBrains Mono' }, maxTicksLimit: 8 }
+    /* ─────────────────────── Chart scaffolding ─────────────────────── */
+    function baseOpts() {
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: REDUCED ? false : { duration: 350, easing: 'easeOutQuart' },
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            display: true,
+            labels: {
+              color: SCREEN.legend,
+              font: { size: 10, family: MONO },
+              boxWidth: 14,
+              boxHeight: 2,
+              filter: item => !item.text.startsWith('_'),  // hide helper datasets
+            }
+          },
+          tooltip: {
+            backgroundColor: SCREEN.tooltip.bg,
+            borderColor: SCREEN.tooltip.border,
+            borderWidth: 1,
+            titleColor: SCREEN.tooltip.title,
+            bodyColor: SCREEN.tooltip.body,
+            titleFont: { family: MONO, size: 10 },
+            bodyFont: { family: MONO, size: 11 },
+            filter: item => !item.dataset.label.startsWith('_'),
+          }
         },
-        y: {
-          grid: { color: CHART_COLORS.grid },
-          ticks: { color: CHART_COLORS.tick, font: { size: 10, family: 'JetBrains Mono' }, callback: v => '$' + v.toFixed(2) }
-        }
-      }
-    });
-
-    function renderChart(res) {
-      document.getElementById('placeholder').style.display = 'none';
-      const canvas = document.getElementById('myChart');
-      canvas.style.display = 'block';
-      if (chartInst) { chartInst.destroy(); chartInst = null; }
-      const ctx = canvas.getContext('2d');
-
-      if (activeTab === 'convergence') {
-        const steps = 20;
-        const labels = [], prices = [], upper = [], lower = [];
-        for (let i = 1; i <= steps; i++) {
-          const frac = i / steps;
-          const nf = 1 / Math.sqrt(frac + 0.01);
-          const noise = (Math.random() - 0.5) * res.std_error * nf * 4;
-          const p = res.price + noise;
-          labels.push(Math.round(res.inputs.paths * frac).toLocaleString());
-          prices.push(+p.toFixed(4));
-          upper.push(+(p + res.std_error * nf * 1.96).toFixed(4));
-          lower.push(+(p - res.std_error * nf * 1.96).toFixed(4));
-        }
-        chartInst = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels,
-            datasets: [
-              { label: 'Estimated Price', data: prices, borderColor: CHART_COLORS.line, borderWidth: 1.5, pointRadius: 2, pointBackgroundColor: CHART_COLORS.line, tension: 0.3, fill: false },
-              { label: '95% CI Upper', data: upper, borderColor: CHART_COLORS.dashed, borderDash: [5, 4], borderWidth: 1, pointRadius: 0, fill: '+1', backgroundColor: CHART_COLORS.band },
-              { label: '95% CI Lower', data: lower, borderColor: CHART_COLORS.dashed, borderDash: [5, 4], borderWidth: 1, pointRadius: 0, fill: false },
-            ]
+        scales: {
+          x: {
+            grid: { color: SCREEN.grid },
+            border: { color: SCREEN.grid },
+            ticks: { color: SCREEN.tick, font: { size: 10, family: MONO }, maxTicksLimit: 8 }
           },
-          options: baseChartOpts()
-        });
-      } else {
-        const S = res.inputs.S, K = res.inputs.K, type = res.inputs.option_type;
-        const spots = [], payoffs = [], intrinsic = [];
-        const range = K * 0.8;
-        for (let i = 0; i <= 60; i++) {
-          const s = S - range + (2 * range * i / 60);
-          spots.push(s.toFixed(1));
-          const raw = type === 'call' ? Math.max(s - K, 0) : Math.max(K - s, 0);
-          intrinsic.push(+raw.toFixed(4));
-          const tv = res.price * Math.exp(-Math.pow((s - K) / (K * 0.3), 2));
-          payoffs.push(+(raw + tv * 0.4).toFixed(4));
+          y: {
+            grid: { color: SCREEN.grid },
+            border: { color: SCREEN.grid },
+            ticks: { color: SCREEN.tick, font: { size: 10, family: MONO }, callback: v => '$' + (+v).toFixed(2) }
+          }
         }
-        const opts = baseChartOpts();
-        opts.plugins.legend = { display: true, labels: { color: '#6b6b6b', font: { size: 11, family: 'Inter' }, boxWidth: 14 } };
-        opts.scales.x.ticks.callback = (v, i) => '$' + spots[i];
-        opts.scales.x.ticks.maxTicksLimit = 10;
-        chartInst = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: spots,
-            datasets: [
-              { label: 'Intrinsic Value', data: intrinsic, borderColor: CHART_COLORS.dashed, borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, fill: false },
-              { label: 'Option Value', data: payoffs, borderColor: CHART_COLORS.purple, backgroundColor: CHART_COLORS.purpleArea, borderWidth: 1.5, pointRadius: 0, tension: 0.4, fill: 'origin' },
-            ]
-          },
-          options: opts
-        });
-      }
+      };
     }
 
-    function addHistory(inputs, res) {
-      history.unshift({ inputs, res });
+    function freshCanvas() {
+      document.getElementById('placeholder').style.display = 'none';
+      const canvas = document.getElementById('chartCanvas');
+      canvas.style.display = 'block';
+      if (chartInst) { chartInst.destroy(); chartInst = null; }
+      return canvas.getContext('2d');
+    }
+
+    function showPlaceholder(msg) {
+      if (chartInst) { chartInst.destroy(); chartInst = null; }
+      document.getElementById('chartCanvas').style.display = 'none';
+      const ph = document.getElementById('placeholder');
+      ph.style.display = 'flex';
+      ph.innerHTML = '<span>' + msg + '</span>';
+    }
+
+    function setNote(text) {
+      document.getElementById('chartNote').textContent = text;
+    }
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('.crt-tab').forEach(b => b.classList.remove('active'));
+      document.getElementById('tab-' + tab).classList.add('active');
+      renderActiveTab();
+    }
+
+    function renderActiveTab() {
+      if (!lastResult) { showPlaceholder('Awaiting simulation'); setNote(''); return; }
+      if (activeTab === 'convergence') renderConvergence();
+      else renderSamplePaths();
+    }
+
+    /* ─────────────── Chart 1: Convergence (REAL engine runs) ───────────────
+       Progressive re-runs at increasing path counts; each point is a genuine
+       MC estimate with its own CI. Dashed neutral line = analytic BS truth. */
+    function renderConvergence() {
+      if (!convergenceData || convergenceData.points.length < 2) {
+        showPlaceholder(sweepActive ? 'Computing convergence sweep' : 'Sweep unavailable');
+        setNote('');
+        return;
+      }
+      const ctx = freshCanvas();
+      const { points, bs } = convergenceData;
+
+      const estimates = points.map(p => ({ x: p.paths, y: p.price }));
+      const upper = points.map(p => ({ x: p.paths, y: p.ci_upper }));
+      const lower = points.map(p => ({ x: p.paths, y: p.ci_lower }));
+      const bsLine = points.map(p => ({ x: p.paths, y: bs }));
+
+      const opts = baseOpts();
+      opts.animation = false; // sweep re-renders per point — animating each redraw is jarring
+      opts.scales.x.type = 'logarithmic';
+      opts.scales.x.ticks.callback = v => v >= 1000 ? (v / 1000) + 'k' : v;
+      opts.plugins.tooltip.callbacks = {
+        title: items => items.length ? (+items[0].parsed.x).toLocaleString() + ' paths' : '',
+        label: c => ' ' + c.dataset.label + ': $' + c.parsed.y.toFixed(4),
+      };
+
+      chartInst = new Chart(ctx, {
+        type: 'line',
+        data: {
+          datasets: [
+            {
+              label: 'MC estimate', data: estimates,
+              borderColor: SCREEN.blue, borderWidth: 2,
+              pointRadius: 4, pointBackgroundColor: SCREEN.blue,
+              pointBorderColor: SCREEN.surface, pointBorderWidth: 2,  // surface ring
+              tension: 0.25, fill: false,
+            },
+            {
+              label: '95% CI', data: upper,
+              borderColor: SCREEN.bluePale, borderDash: [5, 4], borderWidth: 1,
+              pointRadius: 0, fill: '+1', backgroundColor: SCREEN.blueWash,
+            },
+            {
+              label: '_ci_lower', data: lower,
+              borderColor: SCREEN.bluePale, borderDash: [5, 4], borderWidth: 1,
+              pointRadius: 0, fill: false,
+            },
+            {
+              label: 'Black-Scholes', data: bsLine,
+              borderColor: SCREEN.neutral, borderDash: [6, 4], borderWidth: 1.5,
+              pointRadius: 0, fill: false,
+            },
+          ]
+        },
+        options: opts,
+      });
+      setNote('Each point is a real engine run at that path count — not interpolated.');
+    }
+
+    /* ─────────────── Chart 2: Sample GBM paths (client preview) ───────────────
+       Illustrative ensemble simulated in-browser with the same GBM dynamics;
+       solid line = risk-neutral expectation S·e^{rt}, dashed = strike. */
+    function renderSamplePaths() {
+      const ctx = freshCanvas();
+      const inp = lastResult.inputs;
+      const { S, K, r, sigma } = inp;
+      const expiry = inp.T;
+
+      const nPaths = 30;
+      const steps = Math.min(inp.time_steps, 120);
+      const dt = expiry / steps;
+      const drift = (r - 0.5 * sigma * sigma) * dt;
+      const vol = sigma * Math.sqrt(dt);
+
+      // Box-Muller standard normals
+      const randn = () => {
+        let u = 0, v = 0;
+        while (u === 0) u = Math.random();
+        while (v === 0) v = Math.random();
+        return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+      };
+
+      const ensemble = [];
+      for (let p = 0; p < nPaths; p++) {
+        const pts = [{ x: 0, y: S }];
+        let s = S;
+        for (let i = 1; i <= steps; i++) {
+          s *= Math.exp(drift + vol * randn());
+          pts.push({ x: i * dt, y: s });
+        }
+        ensemble.push({
+          label: '_path' + p, data: pts,
+          borderColor: SCREEN.bluePale, borderWidth: 1.5,
+          pointRadius: 0, fill: false, tension: 0,
+        });
+      }
+
+      const expectation = [];
+      const strikeLine = [];
+      for (let i = 0; i <= steps; i++) {
+        const t = i * dt;
+        expectation.push({ x: t, y: S * Math.exp(r * t) });
+        strikeLine.push({ x: t, y: K });
+      }
+
+      const opts = baseOpts();
+      opts.interaction = { mode: 'nearest', intersect: false };
+      opts.scales.x.type = 'linear';
+      opts.scales.x.max = expiry;
+      opts.scales.x.ticks.callback = v => (+v).toFixed(2) + 'y';
+      opts.plugins.tooltip.callbacks = {
+        title: items => items.length ? 't = ' + (+items[0].parsed.x).toFixed(3) + 'y' : '',
+        label: c => ' ' + c.dataset.label.replace(/^_path\d+$/, 'path') + ': $' + c.parsed.y.toFixed(2),
+      };
+      opts.plugins.tooltip.filter = () => true; // paths are anonymous but hoverable
+
+      chartInst = new Chart(ctx, {
+        type: 'line',
+        data: {
+          datasets: [
+            ...ensemble,
+            {
+              label: 'E[Sₜ] = S·e^{rt}', data: expectation,
+              borderColor: SCREEN.blue, borderWidth: 2, pointRadius: 0, fill: false,
+            },
+            {
+              label: 'Strike K', data: strikeLine,
+              borderColor: SCREEN.neutral, borderDash: [6, 4], borderWidth: 1.5,
+              pointRadius: 0, fill: false,
+            },
+          ]
+        },
+        options: opts,
+      });
+      setNote(nPaths + ' illustrative GBM paths simulated in-browser (the engine prices with ' +
+        (+inp.paths).toLocaleString() + ').');
+    }
+
+    /* ─────────────────────── Run log ─────────────────────── */
+    function addHistory(inputs, res, ms) {
+      history.unshift({ inputs, res, ms });
       const tbody = document.getElementById('histBody');
       if (history.length === 1) tbody.innerHTML = '';
-      const idx = history.length;
       const row = document.createElement('tr');
       row.innerHTML = `
-      <td>${idx}</td>
-      <td class="${inputs.option_type}">${inputs.option_type.toUpperCase()}</td>
-      <td>$${inputs.S}</td>
-      <td>$${inputs.K}</td>
-      <td>${inputs.sigma}</td>
-      <td>${inputs.T}y</td>
-      <td class="price">$${res.price.toFixed(4)}</td>
-      <td>${res.std_error.toFixed(4)}</td>
-    `;
+        <td>${history.length}</td>
+        <td class="${inputs.option_type}">${inputs.option_type.toUpperCase()}</td>
+        <td>$${inputs.S}</td>
+        <td>$${inputs.K}</td>
+        <td>${inputs.sigma}</td>
+        <td>${inputs.T}y</td>
+        <td>${(+inputs.paths).toLocaleString()}</td>
+        <td class="price">$${res.price.toFixed(4)}</td>
+        <td>${res.std_error.toFixed(4)}</td>
+        <td>${ms}</td>
+      `;
       tbody.insertBefore(row, tbody.firstChild);
     }
 
-    async function runPricer() {
-      const btn = document.getElementById('priceBtn');
-      btn.disabled = true;
-      btn.classList.add('loading');
-
-      const payload = {
+    /* ─────────────────────── API plumbing ─────────────────────── */
+    function readPayload() {
+      return {
         S: parseFloat(document.getElementById('S').value),
         K: parseFloat(document.getElementById('K').value),
         r: parseFloat(document.getElementById('r').value),
@@ -922,42 +1417,108 @@
         time_steps: parseInt(document.getElementById('time_steps').value),
         option_type: optionType,
       };
+    }
+
+    async function priceOnce(payload) {
+      const t0 = performance.now();
+      const resp = await fetch('/api/price', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json();
+      if (!resp.ok || data.error) throw new Error(data.error || 'Server error');
+      data._ms = Math.round(performance.now() - t0);
+      return data;
+    }
+
+    /* Real convergence sweep: geometric path counts up to the selected total. */
+    async function runConvergenceSweep(payload, gen) {
+      const ladder = [1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000]
+        .filter(p => p < payload.paths);
+      ladder.push(payload.paths);
+
+      const bs = bsPrice(payload.S, payload.K, payload.r, payload.sigma, payload.T, payload.option_type);
+      const points = [];
+      convergenceData = null; // "computing…" state
+      sweepActive = true;
+      if (activeTab === 'convergence') renderActiveTab();
 
       try {
-        const resp = await fetch('/api/price', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const data = await resp.json();
-
-        if (!resp.ok || data.error) {
-          showToast('Error: ' + (data.error || 'Server error'));
-          return;
+        for (const p of ladder) {
+          if (gen !== sweepGeneration) return; // superseded by a newer run
+          if (p === payload.paths && lastResult) {
+            // reuse the main run instead of re-pricing it
+            points.push({ paths: p, price: lastResult.price, ci_lower: lastResult.ci_lower, ci_upper: lastResult.ci_upper });
+          } else {
+            const d = await priceOnce({ ...payload, paths: p });
+            if (gen !== sweepGeneration) return;
+            points.push({ paths: p, price: d.price, ci_lower: d.ci_lower, ci_upper: d.ci_upper });
+          }
+          convergenceData = { points: [...points], bs };
+          if (activeTab === 'convergence') renderConvergence();
         }
-
-        lastResult = data;
-
-        setMetric('price', '$' + data.price.toFixed(4));
-        setMetric('stderr', '$' + data.std_error.toFixed(4));
-        setMetric('lower', '$' + data.ci_lower.toFixed(4));
-        setMetric('upper', '$' + data.ci_upper.toFixed(4));
-
-        updateCIBar(data.price, data.ci_lower, data.ci_upper);
-        renderChart(data);
-        addHistory(data.inputs, data);
-
-      } catch (err) {
-        showToast('Could not reach server — is server.py running?');
+      } catch {
+        if (gen !== sweepGeneration) return;
+        convergenceData = { points, bs }; // keep whatever we got
       } finally {
-        btn.disabled = false;
-        btn.classList.remove('loading');
+        if (gen === sweepGeneration) {
+          sweepActive = false;
+          if (activeTab === 'convergence') renderActiveTab();
+        }
       }
     }
 
+    /* ─────────────────────── Main run ─────────────────────── */
+    async function runPricer() {
+      const btn = document.getElementById('priceBtn');
+      btn.disabled = true;
+      btn.textContent = 'Pricing…';
+
+      const payload = readPayload();
+
+      try {
+        const data = await priceOnce(payload);
+        lastResult = data;
+        setStatus('online', 'Engine Online');
+
+        const bs = bsPrice(payload.S, payload.K, payload.r, payload.sigma, payload.T, payload.option_type);
+        const diff = data.price - bs;
+
+        setMetric('price', '$' + data.price.toFixed(4));
+        setMetric('stderr', '$' + data.std_error.toFixed(4));
+        setMetric('bs', '$' + bs.toFixed(4));
+        setMetric('time', data._ms + ' ms');
+        document.getElementById('sub-price').textContent =
+          (+payload.paths).toLocaleString() + ' paths × ' + payload.time_steps + ' steps';
+        document.getElementById('sub-bs').textContent =
+          'MC − BS = ' + (diff >= 0 ? '+' : '') + diff.toFixed(4);
+
+        updateCIBar(data.price, data.ci_lower, data.ci_upper);
+        addHistory(data.inputs, data, data._ms);
+
+        // kick off the real convergence sweep (cancels any stale one)
+        const gen = ++sweepGeneration;
+        runConvergenceSweep(payload, gen); // intentionally not awaited
+
+      } catch (err) {
+        if (err instanceof TypeError) {
+          setStatus('offline', 'Server Offline');
+          showToast('COULD NOT REACH SERVER — IS SERVER.PY RUNNING?');
+        } else {
+          showToast('ERROR: ' + err.message);
+        }
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Price Option';
+      }
+    }
+
+    /* ─────────────────────── Boot ─────────────────────── */
     document.addEventListener('keydown', e => {
       if (e.key === 'Enter' && e.ctrlKey) runPricer();
     });
+    checkServer();
   </script>
 </body>
 
