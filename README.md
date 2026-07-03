@@ -9,7 +9,8 @@ A European options pricer built on a C++ simulation engine, exposed through a Py
 - **Black-Scholes GBM simulation**: Geometric Brownian Motion path generation in C++
 - **Call & Put pricing**: European-style options with configurable parameters
 - **Statistical output**: Option price, standard error, and 95% confidence interval
-- **Convergence & payoff charts**: Visualise simulation quality and payoff profiles
+- **Parallelization**: Parallel threads run using OpenMP
+- **Convergence & sample path charts**: Visualise simulation quality and payoff profiles
 - **Run history**: In-session table of all pricing runs
 - **REST API**: Simple JSON endpoint for programmatic access
 
