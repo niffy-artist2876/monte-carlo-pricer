@@ -10,7 +10,7 @@ A European options pricer built on a C++ simulation engine, exposed through a Py
 - **Call & Put pricing**: European-style options with configurable parameters
 - **Statistical output**: Option price, standard error, and 95% confidence interval
 - **Parallelization**: Parallel threads run using OpenMP
-- **Convergence & sample path charts**: Visualise simulation quality and payoff profiles
+- **Convergence & sample path charts**: Visualise simulation quality and sample paths
 - **Run history**: In-session table of all pricing runs
 - **REST API**: Simple JSON endpoint for programmatic access
 
