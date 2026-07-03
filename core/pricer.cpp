@@ -3,17 +3,28 @@
 #include <cmath>
 #include <numeric>
 #include <vector>
+#include <random>
+#include <omp.h>
+
+
 
 MCResult mc_price(OptionParams parameters, int paths, int time_steps, OptionType option_type){
-	MCResult res;
+	
 	std::vector<double> payoffs(paths);
-	std::vector<double> path;
-	for(int i = 0; i<paths; i++){
-		path = simulate_path(parameters, time_steps);
-		double last = path.back();
-		option_type == OptionType::CALL ? payoffs[i] = call_payoff(last, parameters.K) : payoffs[i] = put_payoff(last, parameters.K);
+	#pragma omp parallel
+	{
+		std::vector<double> path;
+		int thread = omp_get_thread_num();
+		std::mt19937_64 rng;
+		rng.seed(thread);
+		#pragma omp for
+		for(int i = 0; i<paths; i++){
+			path = simulate_path(parameters, time_steps, rng);
+			double last = path.back();
+			option_type == OptionType::CALL ? payoffs[i] = call_payoff(last, parameters.K) : payoffs[i] = put_payoff(last, parameters.K);
+		}
 	}
-
+	MCResult res;
 	double mean = 0.0;
 	for(auto payoff: payoffs){
 		mean += payoff;
